@@ -1,0 +1,3 @@
+[submodule "depends/lattice-zksnark"]
+	path = depends/lattice-zksnark
+	url = https://github.com/jannikspiessens/lattice-zksnark.git

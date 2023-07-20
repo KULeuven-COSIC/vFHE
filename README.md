@@ -2,6 +2,11 @@
 
 This repository contains the code used for my thesis.
 
+## Dependencies
+
+- libprocps
+- Boost C++ libraries
+
 ## Instructions
 
 Fetch all submodules:

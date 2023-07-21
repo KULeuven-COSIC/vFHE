@@ -3,6 +3,7 @@ add_library(
     STATIC
 
     gadgets/gadgets.cpp
+    gadgets/example_gadgets.cpp
     gadgets/pb_ciphertext.cpp
 
     lattice_parameters.cpp

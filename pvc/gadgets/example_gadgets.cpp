@@ -23,12 +23,12 @@ public:
         const std::vector<pb_variable_array<FieldT>>& left_inputs,
         const std::vector<pb_variable_array<FieldT>>& right_inputs,
         const pb_variable_array<FieldT>& output,
-        const std::vector<pb_variable_array<FieldT>>& left_input_scalars
-            = std::vector<pb_variable_array<FieldT>>(),
-        const std::vector<pb_variable_array<FieldT>>& right_input_scalars
-            = std::vector<pb_variable_array<FieldT>>(),
-        const pb_variable_array<FieldT>& left_constant_term=pb_variable_array<FieldT>(),
-        const pb_variable_array<FieldT>& right_constant_term=pb_variable_array<FieldT>(),
+        const std::vector<std::vector<FieldT>>& left_input_scalars
+            = std::vector<std::vector<FieldT>>(),
+        const std::vector<std::vector<FieldT>>& right_input_scalars
+            = std::vector<std::vector<FieldT>>(),
+        const std::vector<FieldT>& left_constant_term=std::vector<FieldT>(),
+        const std::vector<FieldT>& right_constant_term=std::vector<FieldT>(),
         const FieldT output_scalar=FieldT::zero(),
         const std::string& annotation_prefix=""
     ) : gadget<FieldT>(pb, annotation_prefix)
@@ -66,8 +66,8 @@ public:
                 if (ris_size == 0) lcB.add_term(right_inputs[j][i]);
                 else lcB.add_term(right_inputs[j][i], right_input_scalars[j][i]);
             }
-            if (left_constant_term.size() != 0) lcA.add_term(left_constant_term[i]);
-            if (right_constant_term.size() != 0) lcB.add_term(right_constant_term[i]);
+            if (left_constant_term.size() != 0) lcA.add_term(ONE, left_constant_term[i]);
+            if (right_constant_term.size() != 0) lcB.add_term(ONE, right_constant_term[i]);
             pb_linear_combination<FieldT> pblcA{}, pblcB{};
             pblcA.assign(pb, lcA); A.emplace_back(pblcA);
             pblcB.assign(pb, lcB); B.emplace_back(pblcB);
@@ -108,8 +108,8 @@ public:
     
     ct_lincomb_square_gadget(protoboard<FieldT>&pb,
         const std::vector<pb_ciphertext<FieldT>>& inputs,
-        const std::vector<pb_variable_array<FieldT>>& input_scalars,
-        const pb_variable_array<FieldT>& constant_term,
+        const std::vector<std::vector<FieldT>>& input_scalars,
+        const std::vector<FieldT>& constant_term,
         const pb_ciphertext<FieldT>& output,
         const std::string& annotation_prefix=""
     ) : gadget<FieldT>(pb, annotation_prefix)
@@ -130,7 +130,7 @@ public:
             constant_term, constant_term));
         inner_gadgets.emplace_back(vector_lincomb_times_lincomb_gadget<FieldT>(pb,
             c0_inputs, c1_inputs, output[1], input_scalars, input_scalars,
-            constant_term, pb_variable_array<FieldT>(), FieldT(2).inverse()));
+            constant_term, std::vector<FieldT>(), FieldT(2).inverse()));
         inner_gadgets.emplace_back(vector_lincomb_times_lincomb_gadget<FieldT>(pb,
             c1_inputs, c1_inputs, output[2], input_scalars, input_scalars));
     }
@@ -150,8 +150,8 @@ public:
     ) : gadget<FieldT>(pb, annotation_prefix) {};
     void initialize(
         const std::vector<pb_ciphertext<FieldT>>& inputs,
-        const std::vector<std::vector<pb_variable_array<FieldT>>>& input_scalars,
-        const std::vector<pb_variable_array<FieldT>>& constant_term,
+        const std::vector<std::vector<std::vector<FieldT>>>& input_scalars,
+        const std::vector<std::vector<FieldT>>& constant_term,
         const std::vector<pb_ciphertext<FieldT>>& outputs
     ) {
         size_t out_size = outputs.size();
@@ -163,7 +163,8 @@ public:
 
         for (size_t i = 0; i < out_size; ++i) {
             pb_ciphertext<FieldT> NTT_output;
-            NTT_output.push_back(outputs[i][0], outputs[i][1]);
+            NTT_output.push_back(outputs[i][0]);
+            NTT_output.push_back(outputs[i][1]);
             NTT_output.emplace_back(pb_variable_array<FieldT>());
             NTT_output[2].allocate(this->pb, el_length);
             comp_gadgets.emplace_back(ct_lincomb_square_gadget<FieldT>(this->pb,
@@ -183,15 +184,15 @@ public:
 };
 
 template<typename FieldT>
-class layer2_ms_gadget: public gadget<FieldT> {
+class layermid_ms_gadget: public gadget<FieldT> {
 public:
     std::vector<relinearize_gadget<FieldT>> relin_gadgets;
 
-    layer2_ms_gadget(protoboard<FieldT>& pb,
+    layermid_ms_gadget(protoboard<FieldT>& pb,
         const std::string& annotation_prefix=""
     ) : gadget<FieldT>(pb, annotation_prefix) {}
     void initialize(
-        const std::vector<pb_variable_array<FieldT>>& inputs,
+        const std::vector<pb_ciphertext<FieldT>>& inputs,
         const std::vector<std::vector<pb_variable_array<FieldT>>> &decomps,
         const std::vector<pb_variable_array<FieldT>> &rlkkey0,
         const std::vector<pb_variable_array<FieldT>> &rlkkey1,
@@ -204,8 +205,9 @@ public:
         assert(outputs.size() == in_size);
 
         for (size_t i = 0; i < in_size; ++i) {
-            relin_gadgets.emplace_back(relinearize_gadget<FieldT>(
-                inputs[i], decomps[i], rlkkey0, rlkkey1, outputs[i], pt_mod));
+            relinearize_gadget<FieldT> temp(this->pb);
+            temp.initialize(inputs[i], decomps[i], rlkkey0, rlkkey1, outputs[i], pt_mod);
+            relin_gadgets.emplace_back(temp);
         }
     }
     void generate_r1cs_constraints() { for (auto &g : relin_gadgets) g.generate_r1cs_constraints(); }
@@ -213,18 +215,18 @@ public:
 };
 
 template<typename FieldT>
-class layer2_gadget: public gadget<FieldT> {
+class layermid_gadget: public gadget<FieldT> {
 public:
     std::vector<relinearize_modswitch_gadget<FieldT>> relin_ms_gadgets;
     std::vector<ct_lincomb_square_gadget<FieldT>> comp_gadgets;
 
-    layer2_gadget(protoboard<FieldT>& pb,
+    layermid_gadget(protoboard<FieldT>& pb,
         const std::string& annotation_prefix=""
     ) : gadget<FieldT>(pb, annotation_prefix) {}
     void initialize(
         const std::vector<pb_ciphertext<FieldT>>& inputs,
-        const std::vector<std::vector<pb_variable_array<FieldT>>>& input_scalars,
-        const std::vector<pb_variable_array<FieldT>>& constant_term,
+        const std::vector<std::vector<std::vector<FieldT>>>& input_scalars,
+        const std::vector<std::vector<FieldT>>& constant_term,
         const std::vector<std::vector<pb_variable_array<FieldT>>> &decomps,
         const std::vector<pb_variable_array<FieldT>> &rlkkey0,
         const std::vector<pb_variable_array<FieldT>> &rlkkey1,
@@ -248,13 +250,14 @@ public:
         for (size_t i = 0; i < in_size; ++i) {
             inters.emplace_back(pb_ciphertext<FieldT>());
             inters[i].allocate(this->pb, 3, el_length);
-            relin_ms_gadgets.emplace_back(relinearize_modswitch_gadget<FieldT>(
-                inputs[i], decomps[i], rlkkey0, rlkkey1, to_removes[i], pt_mod, q_toremove, inters[i]));
+            relinearize_modswitch_gadget<FieldT> temp(this->pb);
+            temp.initialize(inputs[i], decomps[i], rlkkey0, rlkkey1,
+                to_removes[i], pt_mod, q_toremove, inters[i]);
+            relin_ms_gadgets.emplace_back(temp);
         }
-        for (size_t i = 0; i < out_size; ++i) {
+        for (size_t i = 0; i < out_size; ++i)
             comp_gadgets.emplace_back(ct_lincomb_square_gadget<FieldT>(
-                inputs, input_scalars[i], constant_term[i], outputs[i]));
-        }
+                this->pb, inputs, input_scalars[i], constant_term[i], outputs[i]));
     }
     void generate_r1cs_constraints() {
         for (auto &g : relin_ms_gadgets) g.generate_r1cs_constraints();

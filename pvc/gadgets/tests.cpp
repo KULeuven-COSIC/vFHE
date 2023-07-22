@@ -4,8 +4,11 @@
 #include "libsnark/gadgetlib1/gadgets/basic_gadgets.hpp"
 #include "libsnark/gadgetlib1/pb_variable.hpp"
 #include "pvc/gadgets/gadgets.cpp"
+#include "pvc/gadgets/example_gadgets.cpp"
 
 // Some consistency tests for gadgets
+
+using std::vector;
 
 using namespace libsnark;
 
@@ -202,6 +205,212 @@ r1cs_example<FieldT> test_NTT_gadget(const size_t vector_length)
     }
     std::cout << "]" << std::endl;
     */
+
+    return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());
+}
+
+template<typename FieldT>
+r1cs_example<FieldT> test_layer1_gadget(
+    const size_t in_size, const size_t out_size, const size_t vector_length)
+{
+    protoboard<FieldT> pb;
+
+    vector<pb_ciphertext<FieldT>> inputs, outputs;
+    std::vector<std::vector<std::vector<FieldT>>> input_scalars;
+    std::vector<std::vector<FieldT>> constant_term;
+    
+    for (size_t i = 0; i < in_size; ++i) {
+        pb_ciphertext<FieldT> temp;
+        temp.allocate(pb, 2, vector_length);
+        inputs.emplace_back(temp);
+    }
+    for (size_t j = 0; j < out_size; ++j) {
+        pb_ciphertext<FieldT> temp;
+        temp.allocate(pb, 3, vector_length);
+        outputs.emplace_back(temp);
+        
+        std::vector<std::vector<FieldT>> input_scalar_j;
+        for (size_t i = 0; i < in_size; ++i) {
+            std::vector<FieldT> input_scalar_ji(vector_length);
+            for (size_t k = 0; k < vector_length; ++k)
+                input_scalar_ji[k] = FieldT::random_element();
+            input_scalar_j.emplace_back(input_scalar_ji);
+        }
+        input_scalars.emplace_back(input_scalar_j);
+
+        std::vector<FieldT> constant_term_j(vector_length);
+        for (size_t k = 0; k < vector_length; ++k)
+            constant_term_j[k] = FieldT::random_element();
+        constant_term.emplace_back(constant_term_j);
+    }
+
+    layer1_gadget<FieldT> g(pb);
+    g.initialize(inputs, input_scalars, constant_term, outputs);
+
+    g.generate_r1cs_constraints();
+    
+    for (size_t i = 0; i < in_size; ++i)
+        for (size_t l = 0; l < 2; ++l)
+            for (size_t k = 0; k < vector_length; ++k)
+                pb.val(inputs[i][l][k]) = FieldT::random_element();
+
+    g.generate_r1cs_witness();
+
+    pb.set_input_sizes((in_size*2 + out_size*3)*vector_length);
+    assert(pb.is_satisfied());
+
+    return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());
+}
+
+template<typename FieldT>
+r1cs_example<FieldT> test_layermid_ms_gadget(
+        const size_t in_size, const size_t decomp_size, const size_t vector_length)
+{
+    protoboard<FieldT> pb;
+
+    std::vector<pb_ciphertext<FieldT>> inputs, outputs;
+    std::vector<std::vector<pb_variable_array<FieldT>>> decomps;
+    std::vector<pb_variable_array<FieldT>> rlkkey0, rlkkey1;
+    const FieldT pt_mod = FieldT(2);
+    
+    for (size_t i = 0; i < in_size; ++i) {
+        pb_ciphertext<FieldT> tempi, tempo;
+        tempi.allocate(pb, 2, vector_length);
+        inputs.emplace_back(tempi);
+        tempo.allocate(pb, 3, vector_length);
+        outputs.emplace_back(tempo);
+
+        std::vector<pb_variable_array<FieldT>> tempd;
+        for (size_t j = 0; j < decomp_size; ++j) {
+            pb_variable_array<FieldT> tempdd;
+            tempdd.allocate(pb, vector_length);
+            tempd.emplace_back(tempdd);
+        }
+        decomps.emplace_back(tempd);
+    }
+
+    for (size_t j = 0; j < decomp_size; ++j) {
+        pb_variable_array<FieldT> tempr0, tempr1;
+        tempr0.allocate(pb, vector_length);
+        rlkkey0.emplace_back(tempr0);
+        tempr1.allocate(pb, vector_length);
+        rlkkey1.emplace_back(tempr1);
+    }
+
+    layermid_ms_gadget<FieldT> g(pb);
+    g.initialize(inputs, decomps, rlkkey0, rlkkey1, pt_mod, outputs);
+
+    g.generate_r1cs_constraints();
+    
+    for (size_t i = 0; i < in_size; ++i) {
+        for (size_t l = 0; l < 2; ++l)
+            for (size_t k = 0; k < vector_length; ++k)
+                pb.val(inputs[i][l][k]) = FieldT::random_element();
+        for (size_t j = 0; j < decomp_size; ++j)
+            for (size_t k = 0; k < vector_length; ++k)
+                pb.val(decomps[i][j][k]) = FieldT::random_element();
+    }
+    for (size_t j = 0; j < decomp_size; ++j) {
+        for (size_t k = 0; k < vector_length; ++k) {
+            pb.val(rlkkey0[j][k]) = FieldT::random_element();
+            pb.val(rlkkey1[j][k]) = FieldT::random_element();
+        }
+    }
+
+    g.generate_r1cs_witness();
+
+    pb.set_input_sizes((in_size*5 + 2*decomp_size + in_size*decomp_size)*vector_length);
+    assert(pb.is_satisfied());
+
+    return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());
+}
+
+template<typename FieldT>
+r1cs_example<FieldT> test_layermid_gadget(
+        const size_t in_size, const size_t out_size, const size_t decomp_size, const size_t vector_length)
+{
+    protoboard<FieldT> pb;
+
+    std::vector<pb_ciphertext<FieldT>> inputs, outputs, to_removes;
+    std::vector<std::vector<std::vector<FieldT>>> input_scalars;
+    std::vector<std::vector<FieldT>> constant_term;
+    std::vector<std::vector<pb_variable_array<FieldT>>> decomps;
+    std::vector<pb_variable_array<FieldT>> rlkkey0, rlkkey1;
+    const FieldT pt_mod = FieldT(2), q_toremove = FieldT::random_element();
+    
+    for (size_t i = 0; i < in_size; ++i) {
+        pb_ciphertext<FieldT> tempi, tempt;
+        tempi.allocate(pb, 2, vector_length);
+        inputs.emplace_back(tempi);
+        tempt.allocate(pb, 2, vector_length);
+        to_removes.emplace_back(tempt);
+
+        std::vector<pb_variable_array<FieldT>> tempd;
+        for (size_t j = 0; j < decomp_size; ++j) {
+            pb_variable_array<FieldT> tempdd;
+            tempdd.allocate(pb, vector_length);
+            tempd.emplace_back(tempdd);
+        }
+        decomps.emplace_back(tempd);
+    }
+
+    for (size_t j = 0; j < out_size; ++j) {
+        pb_ciphertext<FieldT> tempo;
+        tempo.allocate(pb, 3, vector_length);
+        outputs.emplace_back(tempo);
+        
+        std::vector<std::vector<FieldT>> input_scalar_j;
+        for (size_t i = 0; i < in_size; ++i) {
+            std::vector<FieldT> input_scalar_ji(vector_length);
+            for (size_t k = 0; k < vector_length; ++k)
+                input_scalar_ji[k] = FieldT::random_element();
+            input_scalar_j.emplace_back(input_scalar_ji);
+        }
+        input_scalars.emplace_back(input_scalar_j);
+
+        std::vector<FieldT> constant_term_j(vector_length);
+        for (size_t k = 0; k < vector_length; ++k)
+            constant_term_j[k] = FieldT::random_element();
+        constant_term.emplace_back(constant_term_j);
+    }
+
+    for (size_t j = 0; j < decomp_size; ++j) {
+        pb_variable_array<FieldT> tempr0, tempr1;
+        tempr0.allocate(pb, vector_length);
+        rlkkey0.emplace_back(tempr0);
+        tempr1.allocate(pb, vector_length);
+        rlkkey1.emplace_back(tempr1);
+    }
+
+    layermid_gadget<FieldT> g(pb);
+    g.initialize(
+        inputs, input_scalars, constant_term,
+        decomps, rlkkey0, rlkkey1, to_removes,
+        pt_mod, q_toremove, outputs);
+
+    g.generate_r1cs_constraints();
+    
+    for (size_t i = 0; i < in_size; ++i) {
+        for (size_t l = 0; l < 2; ++l)
+            for (size_t k = 0; k < vector_length; ++k) {
+                pb.val(inputs[i][l][k]) = FieldT::random_element();
+                pb.val(to_removes[i][l][k]) = FieldT::random_element();
+            }
+        for (size_t j = 0; j < decomp_size; ++j)
+            for (size_t k = 0; k < vector_length; ++k)
+                pb.val(decomps[i][j][k]) = FieldT::random_element();
+    }
+    for (size_t j = 0; j < decomp_size; ++j) {
+        for (size_t k = 0; k < vector_length; ++k) {
+            pb.val(rlkkey0[j][k]) = FieldT::random_element();
+            pb.val(rlkkey1[j][k]) = FieldT::random_element();
+        }
+    }
+
+    g.generate_r1cs_witness();
+
+    pb.set_input_sizes((2*in_size*2 + out_size*3 + 2*decomp_size + in_size*decomp_size)*vector_length);
+    assert(pb.is_satisfied());
 
     return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());
 }

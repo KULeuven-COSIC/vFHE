@@ -31,12 +31,20 @@ int main() {
     libff::print_header("(enter) Test R1CS lattice SNARK");
     */
 
-    r1cs_example<libff::Fr<ppT>> example = test_vector_add_gadget<libff::Fr<ppT>>(10);
+    //r1cs_example<libff::Fr<ppT>> example = test_vector_add_gadget<libff::Fr<ppT>>(10);
     //r1cs_example<libff::Fr<ppT>> example = test_vector_mult_gadget<libff::Fr<ppT>>(10);
     //r1cs_example<libff::Fr<ppT>> example = test_ct_add_gadget<libff::Fr<ppT>>(10);
     //r1cs_example<libff::Fr<ppT>> example = test_ct_mult_gadget<libff::Fr<ppT>>(10);
     //r1cs_example<libff::Fr<ppT>> example = test_ct_inner_product_gadget<libff::Fr<ppT>>(1 << 8, 2);
     //r1cs_example<libff::Fr<ppT>> example = test_NTT_gadget<libff::Fr<ppT>>(1 << 3);
+    
+    r1cs_example<libff::Fr<ppT>> example = test_layer1_gadget<libff::Fr<ppT>>(100, 3, 1 << 12);
+    //r1cs_example<libff::Fr<ppT>> example = test_layermid_ms_gadget<libff::Fr<ppT>>(3, 3, 1 << 12);
+    //r1cs_example<libff::Fr<ppT>> example = test_layermid_gadget<libff::Fr<ppT>>(3, 1, 3, 1 << 12);
+
+    std::cout << "Number of inputs: " << example.constraint_system.num_inputs() << std::endl;
+    std::cout << "Number of variables: " << example.constraint_system.num_variables() << std::endl;
+    std::cout << "Number of constraints: " << example.constraint_system.num_constraints() << std::endl;
 
     /*
     const bool res = run_r1cs_lattice_snark<ppT, cpT, Param>(example);

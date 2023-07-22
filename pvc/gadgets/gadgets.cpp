@@ -560,7 +560,6 @@ public:
 
 // Gadget for entire second layer of POC instantiation
 // combination of merged maintenance gadget and square
-/*
 template<typename FieldT>
 class layer2_gadget : public gadget<FieldT> {
 public:
@@ -597,7 +596,6 @@ public:
         mult_gadget.generate_r1cs_witness();
     }
 };
-*/
 
 
 #endif

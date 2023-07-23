@@ -423,9 +423,10 @@ public:
 
         size_t vec_length = decomp.size();
         assert(vec_length > 0);
-        assert(vec_length == rlkkey.size());
+        assert(vec_length == rlkkey0.size());
+        assert(vec_length == rlkkey1.size());
         size_t array_length = decomp.front().size();
-        assert(to_add.size() == 2);
+        assert(input.size() == 2);
         assert(output.size() == 2);
         
         // NTT the decomposition

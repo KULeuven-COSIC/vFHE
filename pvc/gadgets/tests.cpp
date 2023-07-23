@@ -277,7 +277,7 @@ r1cs_example<FieldT> test_layermid_ms_gadget(
         pb_ciphertext<FieldT> tempi, tempo;
         tempi.allocate(pb, 2, vector_length);
         inputs.emplace_back(tempi);
-        tempo.allocate(pb, 3, vector_length);
+        tempo.allocate(pb, 2, vector_length);
         outputs.emplace_back(tempo);
 
         std::vector<pb_variable_array<FieldT>> tempd;
@@ -319,7 +319,7 @@ r1cs_example<FieldT> test_layermid_ms_gadget(
 
     g.generate_r1cs_witness();
 
-    pb.set_input_sizes((in_size*5 + 2*decomp_size + in_size*decomp_size)*vector_length);
+    pb.set_input_sizes((2*2*in_size + (2 + in_size)*decomp_size)*vector_length);
     assert(pb.is_satisfied());
 
     return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());
@@ -409,7 +409,7 @@ r1cs_example<FieldT> test_layermid_gadget(
 
     g.generate_r1cs_witness();
 
-    pb.set_input_sizes((2*in_size*2 + out_size*3 + 2*decomp_size + in_size*decomp_size)*vector_length);
+    pb.set_input_sizes((3*out_size + 2*2*in_size + (2 + in_size)*decomp_size)*vector_length);
     assert(pb.is_satisfied());
 
     return r1cs_example<FieldT>(pb.get_constraint_system(), pb.primary_input(), pb.auxiliary_input());

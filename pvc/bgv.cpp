@@ -2,7 +2,7 @@
 #define PVC_BGV
 
 #include <pvc/utils.cpp>
-#include <pvc/gadgets/gadgets.cpp>
+#include <pvc/gadgets/example_gadgets.cpp>
 #include <pvc/lattice_parameters.cpp>
 
 /*
@@ -11,23 +11,36 @@
 template <typename F>
 struct layer1 {
     protoboard<F> pboard = protoboard<F>();
-    NTT_ct_inner_product_gadget<F> gadget;
-    std::vector<pb_ciphertext<F>> in_left, in_right;
-    pb_ciphertext<F> output;
+    layer1_gadget<F> gadget;
+    std::vector<pb_ciphertext<F>> inputs, outputs;
+    std::vector<std::vector<std::vector<F>>> input_scalars;
+    std::vector<std::vector<F>> constant_term;
 
     layer1() : gadget(pboard) {}
     
+    void init_random_weights() {
+        input_scalars = std::vector<std::vector<std::vector<F>>>(outputs.size());
+        constant_term = std::vector<std::vector<F>>(outputs.size());
+        for (size_t j = 0; j < outputs.size(); ++j) {
+            input_scalars[j] = std::vector<std::vector<F>>(inputs.size());
+            for (size_t i = 0; i < inputs.size(); ++i) {
+                input_scalars[j][i] = std::vector<F>(NTTsize);
+                for (size_t k = 0; k < NTTsize; ++k)
+                    input_scalars[j][i][k] = F::random_element();
+            }
+            constant_term[j] = std::vector<F>(NTTsize);
+            for (size_t k = 0; k < NTTsize; ++k)
+                constant_term[j][k] = F::random_element();
+        }
+    }
+
     // BGV elements are indistinguishable from random elements in R_Q
     // therefore we can test on random inputs
     void init_random_inputs() {
-        for (size_t i = 0; i < in_left.size(); ++i) {
-            for (size_t j = 0; j < in_left.front().size(); ++j) {
-                for (size_t k = 0; k < NTTsize; ++k) {
-                    pboard.val(in_left[i][j][k]) = F::random_element();
-                    pboard.val(in_right[i][j][k]) = F::random_element();
-                }
-            }
-        }
+        for (size_t i = 0; i < inputs.size(); ++i)
+            for (size_t j = 0; j < inputs.front().size(); ++j)
+                for (size_t k = 0; k < NTTsize; ++k)
+                    pboard.val(inputs[i][j][k]) = F::random_element();
     }
 };
 
@@ -37,30 +50,35 @@ struct layer1 {
 template <typename F>
 struct layer2_proto {
     protoboard<F> pboard = protoboard<F>();
-    std::vector<pb_variable_array<F>> c2, rlk0, rlk1;
-    pb_ciphertext<F> input, output;
+    std::vector<pb_variable_array<F>> rlk0, rlk1;
+    std::vector<std::vector<pb_variable_array<F>>> c2s;
+    std::vector<pb_ciphertext<F>> inputs, outputs;
 
     // Init inputs that come from first layer in same field
     void get_same_field_inputs(layer1<F>& gb1) {
-        for (size_t i = 0; i < input.size()-1; ++i) {
-            for (size_t j = 0; j < NTTsize; ++j)
-                pboard.val(input[i][j]) = gb1.pboard.val(gb1.output[i][j]).value;
+        for (size_t j = 0; j < inputs.size(); ++j) {
+            for (size_t i = 0; i < inputs.front().size()-1; ++i) {
+                for (size_t k = 0; k < NTTsize; ++k)
+                    pboard.val(inputs[j][i][k]) = gb1.pboard.val(gb1.outputs[j][i][k]).value;
+            }
         }
         // rlks should also be indistinguishable from random elements in R_Q
         // therefore we can test on random rlks
         for (size_t i = 0; i < rlk0.size(); ++i) {
-            for (size_t j = 0; j < NTTsize; ++j) {
-                pboard.val(rlk0[i][j]) = F::random_element();
-                pboard.val(rlk1[i][j]) = F::random_element();
+            for (size_t k = 0; k < NTTsize; ++k) {
+                pboard.val(rlk0[i][k]) = F::random_element();
+                pboard.val(rlk1[i][k]) = F::random_element();
             }
         }
     }
 
-    // Fill in one element of c2 from layer one in field Fpp1
+    // Fill in one element of c2 from layer1 in field Fpp1
     template <typename Fpp1>
     void drop_last_input_elt(layer1<typename Fpp1::Fp_type>& gb1) {
-        for (size_t j = 0; j < NTTsize; ++j)
-            pboard.val(c2[Fpp1::IND][j]) = gb1.pboard.val(gb1.output[gb1.output.size()-1][j]).value;
+        for (size_t j = 0; j < inputs.size(); ++j)
+            for (size_t k = 0; k < NTTsize; ++k)
+                pboard.val(c2s[j][Fpp1::IND][k])
+                    = gb1.pboard.val(gb1.outputs[j][gb1.outputs.front().size()-1][k]).value;
     }
 };
 
@@ -69,7 +87,7 @@ struct layer2_proto {
  */
 template <typename F>
 struct layer2_ms : layer2_proto<F> {
-    relinearize_gadget<F> gadget;
+    layermid_ms_gadget<F> gadget;
 
     layer2_ms() : gadget(this->pboard) {}
 };
@@ -79,19 +97,37 @@ struct layer2_ms : layer2_proto<F> {
  */
 template <typename F>
 struct layer2 : layer2_proto<F> {
-    layer2_gadget<F> gadget;
-    pb_ciphertext<F> to_remove;
+    layermid_gadget<F> gadget;
+    std::vector<pb_ciphertext<F>> to_removes;
+    std::vector<std::vector<std::vector<F>>> input_scalars;
+    std::vector<std::vector<F>> constant_term;
 
     layer2() : gadget(this->pboard) {}
+    
+    // TODO: make proto layer for layer2_proto and layer1?
+    void init_random_weights() {
+        input_scalars = std::vector<std::vector<std::vector<F>>>(this->outputs.size());
+        constant_term = std::vector<std::vector<F>>(this->outputs.size());
+        for (size_t j = 0; j < this->outputs.size(); ++j) {
+            input_scalars[j] = std::vector<std::vector<F>>(this->inputs.size());
+            for (size_t i = 0; i < this->inputs.size(); ++i) {
+                input_scalars[j][i] = std::vector<F>(NTTsize);
+                for (size_t k = 0; k < NTTsize; ++k)
+                    input_scalars[j][i][k] = F::random_element();
+            }
+            constant_term[j] = std::vector<F>(NTTsize);
+            for (size_t k = 0; k < NTTsize; ++k)
+                constant_term[j][k] = F::random_element();
+        }
+    }
 
     // Inits extra input for modswitch that comes from layer2_ms'
     template <typename Ffrom>
-    void init_to_remove_from(layer2_ms<Ffrom>& gbfrom) {
-        for (size_t i = 0; i < to_remove.size(); ++i) {
-            for (size_t j = 0; j < NTTsize; ++j) {
-                this->pboard.val(to_remove[i][j]) = gbfrom.pboard.val(gbfrom.output[i][j]).value;
-            }
-        }
+    void init_to_removes_from(layer2_ms<Ffrom>& gbfrom) {
+        for (size_t j = 0; j < to_removes.size(); ++j)
+            for (size_t i = 0; i < to_removes.front().size(); ++i)
+                for (size_t k = 0; k < NTTsize; ++k)
+                    this->pboard.val(to_removes[j][i][k]) = gbfrom.pboard.val(gbfrom.outputs[j][i][k]).value;
     }
 };
 
@@ -107,20 +143,18 @@ struct BGVexample {
     static constexpr size_t modswitch_remove = 1; // how many fields the modswitch removes
     static constexpr ftype prime_to_remove = last_from_pack<params...>::type::p_int; // modulus of that field
     static constexpr size_t rns_size = sizeof...(params); // total amount of fields
-    const size_t input_size;
+    const size_t input_size, hidden_size, output_size;
     
     // Circuits for layer1 per field
     std::tuple<layer1<typename params::pp::Fp_type>...> layer1_boards;
     // Circuits for layer2_ms for field that will be removed
-    typename last_from_pack<layer2_ms<typename params::pp::Fp_type>...>::type layer_int_ks_board;
+    typename last_from_pack<layer2_ms<typename params::pp::Fp_type>...>::type layer2_ms_board;
     // Circuits for layer2 per remaining field
     tuple_type_exceptlast<layer2<typename params::pp::Fp_type>...> layer2_boards;
 
-    BGVexample(const size_t input_size) : input_size(input_size)
-    {
-        assert(input_size % 2 == 0); // inputs belong to one of two equally long vectors
-        init<params...>();
-    }
+    BGVexample(const size_t input_size, const size_t hidden_size, const size_t output_size)
+        : input_size(input_size), hidden_size(hidden_size), output_size(output_size)
+    { init<params...>(); }
 
     // Main init routine
     template <typename p, typename... ps>
@@ -130,8 +164,9 @@ struct BGVexample {
         init_layer1<p>();
         if constexpr (sizeof...(ps) >= modswitch_remove) {
             init_layer2<p, layer2<F>>(std::get<layer2<F>>(layer2_boards));
-        } else
-            init_layer2<p, layer2_ms<F>>(layer_int_ks_board);
+        } else {
+            init_layer2<p, layer2_ms<F>>(layer2_ms_board);
+        }
         if constexpr (sizeof...(ps) > 0)
             init<ps...>();
     }
@@ -156,17 +191,20 @@ struct BGVexample {
         using F = typename p::pp::Fp_type;
         auto& gb = std::get<layer1<F>>(layer1_boards);
         auto& pb = gb.pboard;
-        gb.in_left = std::vector<pb_ciphertext<F>>(input_size/2);
-        gb.in_right = std::vector<pb_ciphertext<F>>(input_size/2);
+        gb.inputs = std::vector<pb_ciphertext<F>>(input_size);
+        gb.outputs = std::vector<pb_ciphertext<F>>(hidden_size);
         
-        for (size_t i = 0; i < input_size/2; ++i) {
-            gb.in_left[i].allocate(pb, input_deg, NTTsize);
-            gb.in_right[i].allocate(pb, input_deg, NTTsize);
-        }
-        gb.output.allocate(pb, output_deg, NTTsize);
-        pb.set_input_sizes((input_size*input_deg + output_deg)*NTTsize);
+        for (size_t i = 0; i < input_size; ++i)
+            gb.inputs[i].allocate(pb, input_deg, NTTsize);
+        for (size_t j = 0; j < hidden_size; ++j)
+            gb.outputs[j].allocate(pb, output_deg, NTTsize);
+        
+        pb.set_input_sizes(
+            (input_size*input_deg + hidden_size*output_deg)*NTTsize);
+        gb.init_random_weights();
 
-        gb.gadget.initialize(gb.in_left, gb.in_right, gb.output);
+        gb.gadget.initialize(
+            gb.inputs, gb.input_scalars, gb.constant_term, gb.outputs);
         gb.gadget.generate_r1cs_constraints();
     }
 
@@ -178,27 +216,40 @@ struct BGVexample {
         constexpr bool ks_and_ms = std::is_same<int_layer, layer2<F>>::value;
 
         auto& pb = gb.pboard;
-        gb.c2 = std::vector<pb_variable_array<F>>(rns_size);
         gb.rlk0 = std::vector<pb_variable_array<F>>(rns_size);
         gb.rlk1 = std::vector<pb_variable_array<F>>(rns_size);
-        
         for (size_t i = 0; i < rns_size; ++i) {
-            gb.c2[i].allocate(pb, NTTsize);
             gb.rlk0[i].allocate(pb, NTTsize);
             gb.rlk1[i].allocate(pb, NTTsize);
         }
-        gb.input.allocate(pb, input_deg, NTTsize);
-        gb.output.allocate(pb, output_deg, NTTsize);
-        if constexpr (ks_and_ms)
-            gb.to_remove.allocate(pb, input_deg, NTTsize);
-        pb.set_input_sizes((ks_and_ms*output_deg + 2*input_deg + 3*rns_size)*NTTsize);
+        gb.inputs = std::vector<pb_ciphertext<F>>(hidden_size);
+        gb.c2s = std::vector<std::vector<pb_variable_array<F>>>(hidden_size);
+        for (size_t j = 0; j < hidden_size; ++j) {
+            gb.inputs[j].allocate(pb, input_deg, NTTsize);
+            gb.c2s[j] = std::vector<pb_variable_array<F>>(rns_size);
+            for (size_t k = 0; k < rns_size; ++k)
+                gb.c2s[j][k].allocate(pb, NTTsize);
+        }
+        size_t size_for_outputs = (ks_and_ms) ? output_size : hidden_size;
+        gb.outputs = std::vector<pb_ciphertext<F>>(size_for_outputs);
+        for (size_t i = 0; i < size_for_outputs; ++i)
+            gb.outputs[i].allocate(pb, input_deg + ks_and_ms, NTTsize);
     
-        if constexpr (ks_and_ms)
+        if constexpr (ks_and_ms) {
+            gb.to_removes = std::vector<pb_ciphertext<F>>(hidden_size);
+            for (size_t j = 0; j < hidden_size; ++j)
+                gb.to_removes[j].allocate(pb, input_deg, NTTsize);
+            gb.init_random_weights();
             gb.gadget.initialize(
-                gb.input, gb.c2, gb.rlk0, gb.rlk1, gb.to_remove, (F) PT_MOD, (F) prime_to_remove, gb.output);
-        else
+                gb.inputs, gb.input_scalars, gb.constant_term,
+                gb.c2s, gb.rlk0, gb.rlk1, gb.to_removes,
+                (F) PT_MOD, (F) prime_to_remove, gb.outputs);
+        } else
             gb.gadget.initialize(
-                gb.input, gb.c2, gb.rlk0, gb.rlk1, gb.output, (F) PT_MOD);
+                gb.inputs, gb.c2s, gb.rlk0, gb.rlk1, (F) PT_MOD, gb.outputs);
+
+        pb.set_input_sizes((ks_and_ms*output_size*output_deg
+            + 2*input_deg*hidden_size + (2 + hidden_size)*rns_size)*NTTsize);
         gb.gadget.generate_r1cs_constraints();
     }
 
@@ -229,7 +280,7 @@ struct BGVexample {
             gb2.get_same_field_inputs(gb1);
             spread_c2_to_l2_boards<ps...>();
         } else {
-            layer2_ms<typename Fppfrom::Fp_type>& gb2 = layer_int_ks_board;
+            layer2_ms<typename Fppfrom::Fp_type>& gb2 = layer2_ms_board;
             gb2.get_same_field_inputs(gb1);
             gb2.gadget.generate_r1cs_witness();
         }
@@ -241,7 +292,7 @@ struct BGVexample {
             gbto.template drop_last_input_elt<Fppfrom>(gbfrom);
             spread_c2_to_l2_boards_helper<Fppfrom, ps...>(gbfrom);
         } else {
-            auto& gbto = layer_int_ks_board;
+            auto& gbto = layer2_ms_board;
             gbto.template drop_last_input_elt<Fppfrom>(gbfrom);
         }
     }
@@ -251,10 +302,10 @@ struct BGVexample {
     void calculate_layer2_boards() {
         using Fpp = typename p::pp;
         using F = typename Fpp::Fp_type;
-        auto& l_int = std::get<layer2<F>>(layer2_boards);
+        auto& gb = std::get<layer2<F>>(layer2_boards);
 
-        l_int.init_to_remove_from(layer_int_ks_board);
-        l_int.gadget.generate_r1cs_witness();
+        gb.init_to_removes_from(layer2_ms_board);
+        gb.gadget.generate_r1cs_witness();
         
         if constexpr (sizeof...(ps) > modswitch_remove)
             calculate_layer2_boards<ps...>();
@@ -287,7 +338,7 @@ struct BGVexample {
     }
     template <typename p>
     protoboard<typename p::pp::Fp_type>& get_protoboard_int_ks() {
-        return layer_int_ks_board.pboard;
+        return layer2_ms_board.pboard;
     }
 };
 

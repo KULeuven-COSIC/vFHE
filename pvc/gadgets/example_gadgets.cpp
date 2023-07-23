@@ -33,41 +33,44 @@ public:
         const std::string& annotation_prefix=""
     ) : gadget<FieldT>(pb, annotation_prefix)
     {
-        size_t in_size = left_inputs.size();
-        assert(in_size > 0 && in_size == right_inputs.size());
-        size_t out_size = output.size();
-        assert(out_size > 0);
+        size_t li_size = left_inputs.size(); assert(li_size > 0);
+        size_t ri_size = right_inputs.size(); assert(ri_size > 0);
+        size_t veclen = output.size(); assert(veclen > 0);
+        size_t lct_size = left_constant_term.size();
         assert(std::all_of(left_inputs.begin(), left_inputs.end(),
-            [&output](pb_variable_array<FieldT> l_input) {
-                return l_input.size() == out_size
-                    && (left_constant_term.size() == 0
-                    || left_constant_term.size() == l_input.size());
+            [&veclen, &lct_size](pb_variable_array<FieldT> l_input) {
+                return l_input.size() == veclen
+                    && (lct_size == 0 || lct_size == l_input.size());
             }));
+        size_t rct_size = right_constant_term.size();
         assert(std::all_of(right_inputs.begin(), right_inputs.end(),
-            [&output](pb_variable_array<FieldT> r_input) {
-                return r_input.size() == out_size
-                    && (right_constant_term.size() == 0
-                    || right_constant_term.size() == r_input.size());
+            [&veclen, &rct_size](pb_variable_array<FieldT> r_input) {
+                return r_input.size() == veclen
+                    && (rct_size == 0 || rct_size == r_input.size());
             }));
         size_t lis_size = left_input_scalars.size();
-        assert(lis_size == 0 || lis_size == in_size);
+        assert(lis_size == 0 || lis_size == li_size);
         assert(std::all_of(left_input_scalars.begin(), left_input_scalars.end(),
-            [&output](pb_variable_array<FieldT> l_input_sc) { return l_input_sc.size() == out_size; }));
+            [&veclen](std::vector<FieldT> l_input_sc) {
+                return l_input_sc.size() == veclen; }));
         size_t ris_size = right_input_scalars.size();
-        assert(ris_size == 0 || ris_size == in_size);
+        assert(ris_size == 0 || ris_size == ri_size);
         assert(std::all_of(right_input_scalars.begin(), right_input_scalars.end(),
-            [&output](pb_variable_array<FieldT> r_input_sc) { return r_input_sc.size() == out_size; }));
+            [&veclen](std::vector<FieldT> r_input_sc) {
+                return r_input_sc.size() == veclen; }));
 
-        for (size_t i = 0; i < out_size; ++i) {
+        for (size_t i = 0; i < veclen; ++i) {
             linear_combination<FieldT> lcA{}, lcB{};
-            for (size_t j = 0; j < in_size; ++j) {
+            for (size_t j = 0; j < li_size; ++j) {
                 if (lis_size == 0) lcA.add_term(left_inputs[j][i]);
                 else lcA.add_term(left_inputs[j][i], left_input_scalars[j][i]);
+            }
+            for (size_t j = 0; j < ri_size; ++j) {
                 if (ris_size == 0) lcB.add_term(right_inputs[j][i]);
                 else lcB.add_term(right_inputs[j][i], right_input_scalars[j][i]);
             }
-            if (left_constant_term.size() != 0) lcA.add_term(ONE, left_constant_term[i]);
-            if (right_constant_term.size() != 0) lcB.add_term(ONE, right_constant_term[i]);
+            if (lct_size != 0) lcA.add_term(ONE, left_constant_term[i]);
+            if (rct_size != 0) lcB.add_term(ONE, right_constant_term[i]);
             pb_linear_combination<FieldT> pblcA{}, pblcB{};
             pblcA.assign(pb, lcA); A.emplace_back(pblcA);
             pblcB.assign(pb, lcB); B.emplace_back(pblcB);
@@ -75,7 +78,7 @@ public:
         if (output_scalar == FieldT::zero())
             C = pb_linear_combination_array<FieldT>(output);
         else {
-            for (size_t i = 0; i < out_size; ++i) {
+            for (size_t i = 0; i < veclen; ++i) {
                 linear_combination<FieldT> lcC{}; lcC.add_term(output[i], output_scalar);
                 pb_linear_combination<FieldT> pblcC{}; pblcC.assign(this->pb, lcC);
                 C.emplace_back(pblcC);
@@ -118,7 +121,7 @@ public:
         assert(in_size > 0);
         assert(output.size() == 3);
         assert(std::all_of(inputs.begin(), inputs.end(),
-            [&output](pb_ciphertext<FieldT> input){ return input.size() == 2; }));
+            [](pb_ciphertext<FieldT> input){ return input.size() == 2; }));
 
         std::vector<pb_variable_array<FieldT>> c0_inputs, c1_inputs;
         for (size_t i = 0; i < in_size; ++i) {
@@ -237,8 +240,8 @@ public:
     ) {
         size_t in_size = inputs.size();
         assert(in_size > 0);
-        assert(decomp.size() == in_size);
-        assert(to_remove.size() == in_size);
+        assert(decomps.size() == in_size);
+        assert(to_removes.size() == in_size);
         size_t out_size = outputs.size();
         assert(out_size > 0);
         assert(outputs[0].size() > 0);
@@ -249,7 +252,7 @@ public:
         std::vector<pb_ciphertext<FieldT>> inters;
         for (size_t i = 0; i < in_size; ++i) {
             inters.emplace_back(pb_ciphertext<FieldT>());
-            inters[i].allocate(this->pb, 3, el_length);
+            inters[i].allocate(this->pb, 2, el_length);
             relinearize_modswitch_gadget<FieldT> temp(this->pb);
             temp.initialize(inputs[i], decomps[i], rlkkey0, rlkkey1,
                 to_removes[i], pt_mod, q_toremove, inters[i]);

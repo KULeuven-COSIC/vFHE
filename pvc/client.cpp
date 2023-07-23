@@ -59,7 +59,7 @@ public:
     // Everything SNARK related per field
     std::tuple<snarker<params>...> snarkers;
 
-    Client(int k) : bgv(BGVexample<params...>(2*k))
+    Client(int k) : bgv(BGVexample<params...>(k, 3, 1))
     {
         libff::start_profiling();
         init_snarker<params...>();
@@ -104,7 +104,7 @@ public:
 
 int main(int argc, char *argv[]) {
     if (argc < 2) {
-        std::cout << "provide inner product size k as argument" << std::endl;
+        std::cout << "usage: client input_size" << std::endl;
         return -1;
     }
     

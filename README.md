@@ -1,11 +1,9 @@
-# Private Verifiable Computation via Lattice-based SNARKs
-
-This repository contains the code used for my thesis.
+# vFHE
 
 ## Dependencies
 
-- libprocps
-- Boost C++ libraries
+- libprocps (or call cmake with option `-DWITH_PROCPS=OFF`)
+- Boost C++ libraries (or comment out line 154-155 in `depends/lattice-zksnark/depends/libsnark/CMakeLists.txt`)
 
 ## Instructions
 

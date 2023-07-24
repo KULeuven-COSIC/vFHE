@@ -1,8 +1,8 @@
 add_library(
-    pvc
+    vfhe
     STATIC
 
-    gadgets/gadgets.cpp
+    gadgets/basic_gadgets.cpp
     gadgets/example_gadgets.cpp
     gadgets/pb_ciphertext.cpp
 
@@ -13,10 +13,10 @@ add_library(
     client.cpp
 )
 
-target_link_libraries(pvc lwe_interface)
+target_link_libraries(vfhe lwe_interface)
 
 target_include_directories(
-    pvc
+    vfhe
     PUBLIC
     ${LATTICEZKSNARK_DIR}
 )
@@ -24,10 +24,10 @@ target_include_directories(
 set(CMAKE_RUNTIME_OUTPUT_DIRECTORY bin)
 
 add_executable(test_params tests/test_parameters.cpp)
-target_link_libraries(test_params pvc)
+target_link_libraries(test_params vfhe)
 
 add_executable(test_gadgets tests/test_gadgets.cpp)
-target_link_libraries(test_gadgets pvc)
+target_link_libraries(test_gadgets vfhe)
 
 add_executable(client client.cpp)
-target_link_libraries(client pvc)
+target_link_libraries(client vfhe)

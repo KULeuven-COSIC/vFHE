@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(pvc)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+#set(CMAKE_BUILD_TYPE None)
 
 if("${LATTICEZKSNARK_DIR}" STREQUAL "")
   set(
@@ -16,7 +17,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR "${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
   # Common compilation flags and warning configuration
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra -Wfatal-errors -pthread -maes -msse2 -msse3 -mpopcnt")
   ########### TEMPORARY ###########
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-range-loop-construct -Wno-deprecated")
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-range-loop-construct -Wno-deprecated -ftemplate-backtrace-limit=0")
 
   if("${MULTICORE}")
     set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -fopenmp")
@@ -36,4 +37,4 @@ set(
 include_directories(.)
 
 add_subdirectory(depends)
-add_subdirectory(pvc)
+add_subdirectory(vfhe)

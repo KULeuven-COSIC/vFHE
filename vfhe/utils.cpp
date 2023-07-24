@@ -1,7 +1,7 @@
 #ifndef PVC_UTILS
 #define PVC_UTILS
 
-#include <pvc/lattice_parameters.cpp>
+#include <vfhe/lattice_parameters.cpp>
 
 // Struct that helps select the last type from a parameter pack
 template <typename p, typename... ps>

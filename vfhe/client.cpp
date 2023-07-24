@@ -1,7 +1,7 @@
 #ifndef PVC_CLIENT
 #define PVC_CLIENT
 
-#include <pvc/bgv.cpp>
+#include <vfhe/bgv.cpp>
 #include <lwe/snark/r1cs_lattice_snark.hpp>
 
 /*

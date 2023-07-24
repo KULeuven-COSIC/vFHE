@@ -1,9 +1,9 @@
 #ifndef PVC_BGV
 #define PVC_BGV
 
-#include <pvc/utils.cpp>
-#include <pvc/gadgets/example_gadgets.cpp>
-#include <pvc/lattice_parameters.cpp>
+#include <vfhe/utils.cpp>
+#include <vfhe/gadgets/example_gadgets.cpp>
+#include <vfhe/lattice_parameters.cpp>
 
 /*
  * Represents the first layer in a specific field

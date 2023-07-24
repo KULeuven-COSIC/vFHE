@@ -2,7 +2,7 @@
 #define PVC_GADGETS
 
 #include <libsnark/gadgetlib1/gadget.hpp>
-#include <pvc/gadgets/pb_ciphertext.cpp>
+#include <vfhe/gadgets/pb_ciphertext.cpp>
 
 using namespace libsnark;
 

@@ -1,7 +1,7 @@
 #ifndef PVC_EX_GADGETS
 #define PVC_EX_GADGETS
 
-#include <pvc/gadgets/basic_gadgets.cpp>
+#include <vfhe/gadgets/basic_gadgets.cpp>
 
 using namespace libsnark;
 

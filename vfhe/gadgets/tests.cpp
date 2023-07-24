@@ -1,10 +1,9 @@
 #include <libsnark/relations/constraint_satisfaction_problems/r1cs/examples/r1cs_examples.hpp>
 #include <libsnark/gadgetlib1/protoboard.hpp>
 
-#include "libsnark/gadgetlib1/gadgets/basic_gadgets.hpp"
-#include "libsnark/gadgetlib1/pb_variable.hpp"
-#include "pvc/gadgets/gadgets.cpp"
-#include "pvc/gadgets/example_gadgets.cpp"
+#include <libsnark/gadgetlib1/gadgets/basic_gadgets.hpp>
+#include <libsnark/gadgetlib1/pb_variable.hpp>
+#include <vfhe/gadgets/example_gadgets.cpp>
 
 // Some consistency tests for gadgets
 

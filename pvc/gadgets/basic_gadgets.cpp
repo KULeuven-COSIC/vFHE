@@ -354,52 +354,6 @@ public:
     }
 };
 
-// Gadgets for inner product of ciphertexts
-// with iNTT of last element of output ciphertext
-// NOTE: maybe better to just inlude this iNTT in ct_mult_gadget?
-template <typename FieldT>
-class NTT_ct_inner_product_gadget : gadget<FieldT> {
-public:
-    std::vector<NTT_gadget<FieldT>> iNTTgadgets;
-    std::vector<ct_inner_product_gadget<FieldT>> wrapped_gadgets;
-
-    NTT_ct_inner_product_gadget(
-        protoboard<FieldT>& pb,
-        const std::string& annotation_prefix=""
-    ) : gadget<FieldT>(pb, annotation_prefix) {};
-    void initialize(
-        const std::vector<pb_ciphertext<FieldT>> &left,
-        const std::vector<pb_ciphertext<FieldT>> &right,
-        const pb_ciphertext<FieldT> &output
-    )
-    {
-        assert(left.size() > 0);
-        assert(left[0].size() > 0);
-        size_t outdeg = output.size();
-        size_t el_length = left[0][0].size();
-        assert(el_length > 0);
-        
-        // only last element needs inverse NTT
-        pb_ciphertext<FieldT> NTT_output;
-        for (size_t i = 0; i < outdeg-1; ++i)
-            NTT_output.push_back(output[i]);
-        NTT_output.emplace_back(pb_variable_array<FieldT>());
-        NTT_output[outdeg-1].allocate(this->pb, el_length);
-        wrapped_gadgets.emplace_back(
-            ct_inner_product_gadget<FieldT>(this->pb, left, right, NTT_output));
-        iNTTgadgets.emplace_back(NTT_gadget<FieldT>(this->pb, NTT_output[outdeg-1], output[outdeg-1], true));
-    }
-
-    void generate_r1cs_constraints() {
-        for (auto &g : wrapped_gadgets) g.generate_r1cs_constraints();
-        for (auto &g : iNTTgadgets) g.generate_r1cs_constraints();
-    }
-    void generate_r1cs_witness() {
-        for (auto &g : wrapped_gadgets) g.generate_r1cs_witness();
-        for (auto &g : iNTTgadgets) g.generate_r1cs_witness();
-    }
-};
-
 // Gadget for relinearizing one ciphertext
 template<typename FieldT>
 class relinearize_gadget : public gadget<FieldT> {
@@ -558,45 +512,5 @@ public:
         ms_gadget.generate_r1cs_witness();
     }
 };
-
-// Gadget for entire second layer of POC instantiation
-// combination of merged maintenance gadget and square
-template<typename FieldT>
-class layer2_gadget : public gadget<FieldT> {
-public:
-
-    relinearize_modswitch_gadget<FieldT> relin_ms_gadget;
-    ct_mult_gadget<FieldT> mult_gadget;
-
-    layer2_gadget(protoboard<FieldT>& pb,
-        const std::string &annotation_prefix=""
-    ) : gadget<FieldT>(pb, annotation_prefix), relin_ms_gadget(pb), mult_gadget(pb) {}
-    void initialize(
-        const pb_ciphertext<FieldT> &input,
-        const std::vector<pb_variable_array<FieldT>> &decomp,
-        const std::vector<pb_variable_array<FieldT>> &rlkkey0,
-        const std::vector<pb_variable_array<FieldT>> &rlkkey1,
-        const pb_ciphertext<FieldT>& to_remove,
-        const FieldT pt_mod,
-        const FieldT q_toremove,
-        const pb_ciphertext<FieldT>& output
-    ) {
-        assert(output.size() == 3);
-    
-        pb_ciphertext<FieldT> inter;
-        inter.allocate(this->pb, 3, input[0].size());
-        relin_ms_gadget.initialize(input, decomp, rlkkey0, rlkkey1, to_remove, pt_mod, q_toremove, inter);
-        mult_gadget.initialize(inter, inter, output);
-    }
-    void generate_r1cs_constraints() {
-        relin_ms_gadget.generate_r1cs_constraints();
-        mult_gadget.generate_r1cs_constraints();
-    }
-    void generate_r1cs_witness() {
-        relin_ms_gadget.generate_r1cs_witness();
-        mult_gadget.generate_r1cs_witness();
-    }
-};
-
 
 #endif

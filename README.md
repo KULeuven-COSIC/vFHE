@@ -24,6 +24,6 @@ make client
 
 Run:
 ``` shell
-./pvc/bin/client 2
+./vfhe/bin/client 2
 ```
 
